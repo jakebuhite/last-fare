@@ -2,6 +2,7 @@ using System.Collections;
 using LastFare.Audio;
 using LastFare.Data;
 using LastFare.Driving;
+using LastFare.Navigation;
 using LastFare.Passengers;
 using LastFare.Player;
 using LastFare.UI;
@@ -28,6 +29,9 @@ namespace LastFare.Rides
         const float StillInCarRating = -0.3f;
         const float AttackedRating = -1.6f;
         const float HazardRating = -0.4f;
+        const float ArriveRadius = 7f;        // stop within this many metres of the pin
+        static readonly float[] HazardFractions = { 0.3f, 0.55f, 0.8f }; // along the drop-off route
+        const float HazardMinGap = 25f;       // keep hazards away from the start and end of the route
 
         [Header("Content")]
         [SerializeField] RideDefinition ride;
@@ -39,15 +43,14 @@ namespace LastFare.Rides
         [SerializeField] PassengerActor passenger;
         [SerializeField] LastFareAudio sound;
         [SerializeField] HudView hud;
+        [SerializeField] GpsNavigator gps;
         [SerializeField] RoadHazard[] hazards;
         [SerializeField] GameObject pickupMarker;
         [SerializeField] GameObject dropoffMarker;
+        [SerializeField] Transform pickupPoint;
+        [SerializeField] Transform dropoffPoint;
         [SerializeField] Transform pickupStandPoint;
         [SerializeField] Transform pickupLookPoint;
-
-        [Header("Stops (metres along the route)")]
-        [SerializeField] float pickupDistance = 250f;
-        [SerializeField] float dropoffDistance = 1050f;
 
         float idleTimer;
         float offerDelay = FirstOfferDelay;
@@ -84,7 +87,10 @@ namespace LastFare.Rides
             {
                 hazard.Hit += OnHazardHit;
                 hazard.Cleared += OnHazardCleared;
+                hazard.Passed += OnHazardPassed;
             }
+
+            car.Crashed += OnCrashed;
         }
 
         void Start()
@@ -130,8 +136,8 @@ namespace LastFare.Rides
                     break;
 
                 case RideState.EnRoute:
-                    Objective = $"Drive to pickup: {ride.PickupLabel}  ({Mathf.Max(0f, car.RemainingToStop):0} m)";
-                    if (car.IsStoppedAtTarget) controller.ArrivedAtPickup();
+                    Objective = StopObjective("Pick up", ride.PickupLabel, pickupPoint.position);
+                    if (car.IsStoppedNear(pickupPoint.position, ArriveRadius)) controller.ArrivedAtPickup();
                     break;
 
                 case RideState.Boarding:
@@ -141,9 +147,9 @@ namespace LastFare.Rides
                     break;
 
                 case RideState.InRide:
-                    Objective = $"Drop off: {ride.DropoffLabel}  ({Mathf.Max(0f, car.RemainingToStop):0} m)";
+                    Objective = StopObjective("Drop off", ride.DropoffLabel, dropoffPoint.position);
                     TickPassenger();
-                    if (!finished && car.IsStoppedAtTarget) controller.ArrivedAtDropoff();
+                    if (!finished && car.IsStoppedNear(dropoffPoint.position, ArriveRadius)) controller.ArrivedAtDropoff();
                     break;
 
                 case RideState.DroppingOff:
@@ -152,6 +158,15 @@ namespace LastFare.Rides
                     if (stateTimer <= 0f) controller.Complete();
                     break;
             }
+        }
+
+        string StopObjective(string verb, string label, Vector3 stop)
+        {
+            var offset = stop - car.transform.position;
+            offset.y = 0f;
+            return offset.magnitude <= ArriveRadius
+                ? $"{verb}: stop here"
+                : $"{verb}: {label}  ({gps.Instruction.RemainingMeters:0} m)";
         }
 
         void TickPassenger()
@@ -189,7 +204,7 @@ namespace LastFare.Rides
                     break;
 
                 case RideState.EnRoute:
-                    car.StopAt(pickupDistance);
+                    gps.SetDestination(pickupPoint.position, ride.PickupLabel);
                     pickupMarker.SetActive(true);
                     passenger.ShowWaiting(pickupStandPoint.position, pickupLookPoint.position);
                     hud.Caption($"Pickup in {ride.PickupLabel}. Someone is already waiting.", 5f);
@@ -197,6 +212,8 @@ namespace LastFare.Rides
 
                 case RideState.Boarding:
                     pickupMarker.SetActive(false);
+                    gps.ClearDestination();
+                    car.PlayerControl = false; // hold the brake while he gets in
                     passenger.BeginBoarding(BoardingSeconds - 0.5f);
                     sound.PlayDoor();
                     stateTimer = BoardingSeconds;
@@ -206,14 +223,17 @@ namespace LastFare.Rides
                 case RideState.InRide:
                     sound.PlayDoor();
                     passenger.StartCreeping(new CreepModel());
-                    car.StopAt(dropoffDistance);
+                    car.PlayerControl = true;
+                    gps.SetDestination(dropoffPoint.position, ride.DropoffLabel);
                     dropoffMarker.SetActive(true);
-                    foreach (var hazard in hazards) hazard.Arm(car);
+                    PlaceHazardsAlongRoute();
                     hud.Caption("Rule of thumb: he only moves when you aren't looking.", 6f);
                     break;
 
                 case RideState.DroppingOff:
                     dropoffMarker.SetActive(false);
+                    gps.ClearDestination();
+                    car.PlayerControl = false;
                     foreach (var hazard in hazards) hazard.Disarm();
                     sound.SetTension(0f);
                     stateTimer = DropoffSeconds;
@@ -223,6 +243,23 @@ namespace LastFare.Rides
                 case RideState.Completed:
                     FinishRide();
                     break;
+            }
+        }
+
+        /// <summary>Stands the hazards in the road along the GPS route the player was just given.</summary>
+        void PlaceHazardsAlongRoute()
+        {
+            var route = gps.Route;
+            var length = GpsDirections.Length(route);
+
+            for (var i = 0; i < hazards.Length; i++)
+            {
+                var along = i < HazardFractions.Length ? HazardFractions[i] * length : -1f;
+                if (along < HazardMinGap || along > length - HazardMinGap) continue;
+
+                var point = GpsDirections.PointAlong(route, along, out var direction);
+                hazards[i].PlaceAt(point, -direction); // facing the oncoming car
+                hazards[i].Arm(car);
             }
         }
 
@@ -328,6 +365,19 @@ namespace LastFare.Rides
         void OnHazardCleared()
         {
             hud.Caption("It steps aside. You don't watch where it goes.", 4f);
+        }
+
+        void OnHazardPassed()
+        {
+            if (finished) return;
+            hud.Caption("You swerve past. It doesn't turn to watch you go.", 4f);
+        }
+
+        void OnCrashed(float impactSpeed)
+        {
+            if (finished) return;
+            sound.PlayBump();
+            look.Shake(Mathf.Clamp(impactSpeed * 0.01f, 0.03f, 0.12f), 0.5f);
         }
 
         void OnDeactivated()

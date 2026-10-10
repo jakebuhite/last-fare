@@ -28,6 +28,6 @@ Low-poly, slightly PS1 and dithered, heavy fog and sodium streetlight orange. Ch
 
 ## Open questions
 Track these in `docs/IDEAS.md` and resolve with an ADR in `docs/decisions/`.
-- Free driving or semi-on-rails along splines? (Recommended: semi-on-rails, see `ROADMAP.md`.)
+- ~~Free driving or semi-on-rails along splines?~~ Free driving on an open map with an always-on GPS (ADR 0003).
 - Run-based roguelite (random fares each night) or authored story nights?
 - Is the player ever able to leave the car?

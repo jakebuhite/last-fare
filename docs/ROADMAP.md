@@ -4,7 +4,7 @@
 Build **one complete fare** end to end (request > drive > passenger event > drop-off > result) with placeholder art before widening. If one ride isn't scary and fun, ten won't be. Everything else is a content multiplier on that loop.
 
 ## Recommended technical approach
-- **Driving**: semi-on-rails. The car follows a spline (Unity Splines package); the player controls speed, mirror and interaction, with choices at junctions. Far cheaper than physics driving, and it keeps the camera and set pieces controllable. Revisit only if it feels wrong in playtest.
+- **Driving**: free driving on an open city grid with arcade handling (ADR 0003). The always-on GPS tells the player where to go; set pieces anchor to the GPS route rather than a fixed track.
 - **Data-driven content**: passengers and rides are ScriptableObjects (`PassengerDefinition`, `RideDefinition`). New fares shouldn't need new code unless they introduce a new behaviour.
 - **State machines**: `RideController` owns the ride lifecycle; UI, audio and passenger behaviour subscribe to its events.
 - **Scripted scares**: Timeline plus signal receivers for authored moments; code for systemic ones (mirror checks, rules).

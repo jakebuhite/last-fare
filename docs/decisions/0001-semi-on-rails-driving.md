@@ -1,6 +1,6 @@
 # 0001: Semi-on-rails driving
 
-**Status**: proposed
+**Status**: superseded by [0003](0003-open-map-free-driving.md)
 
 ## Context
 The game is about being trapped in a car with a passenger. Driving needs to feel real but isn't the main challenge. A small team can't afford open-world physics driving plus content.

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using LastFare.Audio;
 using LastFare.Data;
 using LastFare.Driving;
+using LastFare.Navigation;
 using LastFare.Passengers;
 using LastFare.Player;
 using LastFare.Rides;
@@ -13,23 +14,28 @@ using UnityEngine;
 namespace LastFare.Editor
 {
     /// <summary>
-    /// Builds the greybox first-fare prototype into the active scene as ordinary GameObjects: night road
-    /// loop, the car interior with a working rear-view mirror, the passenger, hazards, audio, HUD and the
-    /// FareDirector, all wired through serialized references. Generated materials, meshes and the mirror
-    /// render texture are saved under <see cref="GeneratedDir"/>. Everything is placeholder art meant to
-    /// be replaced piece by piece in the scene.
+    /// Builds the greybox first-fare prototype into the active scene as ordinary GameObjects: an open
+    /// city grid at night, the drivable car with a working rear-view mirror, the passenger, hazards,
+    /// GPS, audio, HUD and the FareDirector, all wired through serialized references. Generated
+    /// materials, meshes and the mirror render texture are saved under <see cref="GeneratedDir"/>.
+    /// Everything is placeholder art meant to be replaced piece by piece in the scene.
     /// </summary>
     public class PrototypeSceneBuilder
     {
         public const string GeneratedDir = "Assets/_Project/Art/Generated";
 
-        const float StartDistance = 40f;
-        const float PickupDistance = 250f;
-        const float RoadHalfWidth = 4f;
+        // Map layout. Blocks and intersections are counted from the south-west corner.
+        const int Columns = 7;            // intersections west to east (6 blocks)
+        const int Rows = 7;               // intersections south to north (6 blocks)
+        const float Block = 60f;          // intersection spacing
+        const float RoadWidth = 10f;
+        const float Sidewalk = 3f;
+        const float LaneOffset = 2.5f;    // lane centre from the road centre
+        static readonly Vector2Int CemeteryBlock = new(3, 4);
+        static readonly Vector2Int HouseBlock = new(5, 0);
 
         readonly RideDefinition ride;
-        RoutePath route;
-        float dropoffDistance;
+        CityMap map;
         System.Random rng;
         Transform worldRoot;
 
@@ -44,38 +50,52 @@ namespace LastFare.Editor
         {
             rng = new System.Random(1234);
 
-            var routeLoop = new GameObject("Route").AddComponent<RouteLoop>();
-            route = routeLoop.Path;
-            dropoffDistance = Mathf.Min(1050f, route.Length - 80f);
+            map = new GameObject("CityMap").AddComponent<CityMap>();
+            map.transform.position = new Vector3(-(Columns - 1) * Block * 0.5f, 0f, -(Rows - 1) * Block * 0.5f);
+            Wire(map, ("columns", Columns), ("rows", Rows), ("blockSize", Block), ("roadWidth", RoadWidth));
 
             SetupAtmosphere();
 
             worldRoot = new GameObject("Environment").transform;
             BuildGround();
-            BuildRoad();
+            BuildRoads();
             BuildStreetLamps();
-            BuildBuildings();
+            BuildCityBlocks();
+            BuildBoundary();
             BuildCemetery();
             BuildHouse();
             MarkStatic(worldRoot);
 
-            var carParts = BuildCar(routeLoop);
-            var passenger = BuildPassenger(carParts.Car.transform, carParts.Eye);
-            var hazards = BuildHazards();
+            // Stops: pickup on the road in front of the cemetery gate, drop-off in front of the house.
+            var north = Vector3.forward;
+            var pickupRoad = map.Intersection(CemeteryBlock.x + 0.5f, CemeteryBlock.y);
+            var dropoffRoad = map.Intersection(HouseBlock.x + 0.5f, HouseBlock.y + 1);
 
             var stops = new GameObject("Stops").transform;
-            var pickupMarker = BuildMarker(stops, "PickupMarker", route.OffsetPoint(PickupDistance, 5.2f), new Color(0.45f, 0.85f, 1f));
-            var dropoffMarker = BuildMarker(stops, "DropoffMarker", route.OffsetPoint(dropoffDistance, 5.2f), new Color(0.55f, 1f, 0.6f));
-            var standPoint = Point(stops, "PickupStandPoint", route.OffsetPoint(PickupDistance - 1.2f, 5.2f));
-            var lookPoint = Point(stops, "PickupLookPoint", route.OffsetPoint(PickupDistance - 1.2f, 0f));
+            var pickupPoint = Point(stops, "PickupPoint", pickupRoad + north * LaneOffset);
+            var dropoffPoint = Point(stops, "DropoffPoint", dropoffRoad - north * LaneOffset);
+            var standPoint = Point(stops, "PickupStandPoint", pickupRoad + north * (RoadWidth * 0.5f + 1.5f) + Vector3.left * 1.2f);
+            var lookPoint = Point(stops, "PickupLookPoint", pickupRoad + Vector3.left * 1.2f);
+            var pickupMarker = BuildMarker(stops, "PickupMarker", pickupRoad + north * (RoadWidth * 0.5f + 0.5f), new Color(0.45f, 0.85f, 1f));
+            var dropoffMarker = BuildMarker(stops, "DropoffMarker", dropoffRoad - north * (RoadWidth * 0.5f + 0.5f), new Color(0.55f, 1f, 0.6f));
+
+            // Start on the south edge of the map, eastbound in the right-hand lane.
+            var carParts = BuildCar(map.Intersection(0.5f, 0f) + Vector3.back * LaneOffset, Quaternion.LookRotation(Vector3.right));
+            var passenger = BuildPassenger(carParts.Car.transform, carParts.Eye);
+            var hazards = BuildHazards();
 
             var systems = new GameObject("Systems").transform;
             var sound = Child(systems, "Audio").AddComponent<LastFareAudio>();
             var hud = Child(systems, "HUD").AddComponent<HudView>();
+            var gpsGo = Child(systems, "GPS");
+            var gps = gpsGo.AddComponent<GpsNavigator>();
+            var gpsView = gpsGo.AddComponent<GpsView>();
             var directorGo = Child(systems, "FareDirector");
             var controller = directorGo.AddComponent<RideController>();
             var director = directorGo.AddComponent<FareDirector>();
 
+            Wire(gps, ("map", map), ("vehicle", carParts.Car.transform));
+            Wire(gpsView, ("gps", gps));
             Wire(hud, ("director", director), ("car", carParts.Car));
             Wire(director,
                 ("ride", ride),
@@ -85,15 +105,16 @@ namespace LastFare.Editor
                 ("passenger", passenger),
                 ("sound", sound),
                 ("hud", hud),
+                ("gps", gps),
                 ("hazards", hazards),
                 ("pickupMarker", pickupMarker),
                 ("dropoffMarker", dropoffMarker),
+                ("pickupPoint", pickupPoint),
+                ("dropoffPoint", dropoffPoint),
                 ("pickupStandPoint", standPoint),
-                ("pickupLookPoint", lookPoint),
-                ("pickupDistance", PickupDistance),
-                ("dropoffDistance", dropoffDistance));
+                ("pickupLookPoint", lookPoint));
 
-            // Hidden until the fare reaches them; shown here would only clutter the scene view.
+            // Hidden until the fare reaches them.
             pickupMarker.SetActive(false);
             dropoffMarker.SetActive(false);
         }
@@ -126,45 +147,35 @@ namespace LastFare.Editor
                 Prim.Lit(new Color(0.045f, 0.05f, 0.045f), 0.02f));
         }
 
-        void BuildRoad()
+        void BuildRoads()
         {
-            var go = Child(worldRoot, "Road");
+            var roads = Child(worldRoot, "Roads").transform;
+            var lines = Child(roads, "CentreLines").transform;
+            var asphalt = Prim.Lit(new Color(0.07f, 0.07f, 0.08f), 0.45f);
+            var paint = Prim.Lit(new Color(0.75f, 0.62f, 0.2f), 0.1f);
+            var net = map.Network;
 
-            var step = 4f;
-            var n = Mathf.CeilToInt(route.Length / step);
-            var verts = new Vector3[(n + 1) * 2];
-            var tris = new int[n * 6];
-
-            for (var i = 0; i <= n; i++)
+            // One piece per street and per intersection, so each gets lit by the lamps near it.
+            for (var e = 0; e < net.EdgeCount; e++)
             {
-                route.Evaluate(i * route.Length / n, out var p, out var f);
-                var right = Vector3.Cross(Vector3.up, f);
-                verts[i * 2] = p - right * RoadHalfWidth + Vector3.up * 0.01f;
-                verts[i * 2 + 1] = p + right * RoadHalfWidth + Vector3.up * 0.01f;
+                var (ia, ib) = net.Edge(e);
+                Vector3 a = net.Node(ia), b = net.Node(ib);
+                var dir = (b - a).normalized;
+                var rot = Quaternion.LookRotation(dir);
+                var length = Block - RoadWidth;
+
+                var street = Prim.Box(roads, "Street", (a + b) * 0.5f, new Vector3(RoadWidth, 0.02f, length), asphalt);
+                street.transform.rotation = rot;
+
+                for (var d = 2f; d + 3f <= length; d += 8f)
+                {
+                    var p = a + dir * (RoadWidth * 0.5f + d + 1.5f) + Vector3.up * 0.015f;
+                    Prim.Box(lines, "Dash", p, new Vector3(0.16f, 0.02f, 3f), paint).transform.rotation = rot;
+                }
             }
 
-            for (var i = 0; i < n; i++)
-            {
-                int a = i * 2, b = i * 2 + 1, c = i * 2 + 2, d = i * 2 + 3;
-                var t = i * 6;
-                tris[t] = a; tris[t + 1] = c; tris[t + 2] = b;
-                tris[t + 3] = b; tris[t + 4] = c; tris[t + 5] = d;
-            }
-
-            var mesh = new Mesh { name = "RoadMesh", vertices = verts, triangles = tris };
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = Prim.Lit(new Color(0.07f, 0.07f, 0.08f), 0.45f);
-
-            var lines = Child(go.transform, "CentreLines").transform;
-            var line = Prim.Lit(new Color(0.75f, 0.62f, 0.2f), 0.1f);
-            for (var d = 0f; d < route.Length; d += 9f)
-            {
-                route.Evaluate(d, out var p, out var f);
-                Prim.Box(lines, "Line", p + Vector3.up * 0.03f, new Vector3(0.16f, 0.02f, 3.4f), line)
-                    .transform.rotation = Quaternion.LookRotation(f);
-            }
+            for (var n = 0; n < net.NodeCount; n++)
+                Prim.Box(roads, "Intersection", net.Node(n), new Vector3(RoadWidth, 0.02f, RoadWidth), asphalt);
         }
 
         void BuildStreetLamps()
@@ -172,103 +183,174 @@ namespace LastFare.Editor
             var lamps = Child(worldRoot, "StreetLamps").transform;
             var pole = Prim.Lit(new Color(0.08f, 0.08f, 0.09f), 0.2f);
             var bulb = Prim.Unlit(new Color(1f, 0.8f, 0.45f));
+            var net = map.Network;
+            var corner = RoadWidth * 0.5f + 1f;
 
-            for (var d = 20f; d < route.Length; d += 42f)
+            for (var n = 0; n < net.NodeCount; n++)
             {
-                var basePoint = route.OffsetPoint(d, RoadHalfWidth + 1.2f);
-                route.Evaluate(d, out _, out var f);
-                var root = Child(lamps, "Lamp").transform;
-                root.SetPositionAndRotation(basePoint, Quaternion.LookRotation(f));
+                // One lamp per intersection on the north-east corner, arm reaching over the crossing.
+                var node = net.Node(n);
+                var basePoint = node + new Vector3(corner, 0f, corner);
+                var toCentre = (node - basePoint).normalized;
 
-                Prim.Box(root, "Pole", new Vector3(0f, 3.2f, 0f), new Vector3(0.14f, 6.4f, 0.14f), pole);
+                var root = Child(lamps, "Lamp").transform;
+                root.SetPositionAndRotation(basePoint, Quaternion.LookRotation(toCentre) * Quaternion.Euler(0f, 90f, 0f));
+
+                var p = Prim.Box(root, "Pole", new Vector3(0f, 3.2f, 0f), new Vector3(0.14f, 6.4f, 0.14f), pole);
+                p.AddComponent<BoxCollider>();
                 Prim.Box(root, "Arm", new Vector3(-0.9f, 6.35f, 0f), new Vector3(1.8f, 0.1f, 0.1f), pole);
                 Prim.Box(root, "Bulb", new Vector3(-1.7f, 6.25f, 0f), new Vector3(0.6f, 0.12f, 0.3f), bulb);
-                Prim.PointLight(root, "Light", new Vector3(-1.7f, 5.9f, 0f), new Color(1f, 0.72f, 0.38f), 24f, 7f);
+                Prim.PointLight(root, "Light", new Vector3(-1.7f, 5.9f, 0f), new Color(1f, 0.72f, 0.38f), 26f, 8f);
             }
         }
 
-        void BuildBuildings()
+        void BuildCityBlocks()
         {
-            var buildings = Child(worldRoot, "Buildings").transform;
+            var blocks = Child(worldRoot, "Blocks").transform;
+            var concrete = Prim.Lit(new Color(0.09f, 0.09f, 0.1f), 0.1f);
             var window = Prim.Unlit(new Color(1f, 0.72f, 0.35f) * 0.85f);
 
-            for (var d = 0f; d < route.Length; d += 26f)
+            // The playable blocks plus a ring of blocks around them that walls the map in.
+            for (var bz = -1; bz < Rows; bz++)
             {
-                for (var side = -1; side <= 1; side += 2)
+                for (var bx = -1; bx < Columns; bx++)
                 {
-                    // Keep the cemetery frontage and the dropoff house clear.
-                    if (side > 0 && (Mathf.Abs(d - PickupDistance) < 40f || Mathf.Abs(d - dropoffDistance) < 25f)) continue;
+                    var current = new Vector2Int(bx, bz);
+                    if (current == CemeteryBlock || current == HouseBlock) continue;
 
-                    var offset = side * (RoadHalfWidth + 12f + (float)rng.NextDouble() * 18f);
-                    var width = 8f + (float)rng.NextDouble() * 10f;
-                    var height = 6f + (float)rng.NextDouble() * 22f;
-                    var depth = 8f + (float)rng.NextDouble() * 8f;
+                    var outer = bx < 0 || bz < 0 || bx >= Columns - 1 || bz >= Rows - 1;
+                    var block = Child(blocks, $"Block_{bx}_{bz}").transform;
+                    block.position = map.BlockCenter(bx, bz);
+                    Prim.Box(block, "Sidewalk", new Vector3(0f, 0.04f, 0f), new Vector3(Block - RoadWidth, 0.08f, Block - RoadWidth), concrete);
+                    BuildLots(block, outer, window);
+                }
+            }
+        }
+
+        void BuildLots(Transform block, bool outer, Material window)
+        {
+            var lot = (Block - RoadWidth - Sidewalk * 2f) * 0.5f;
+
+            for (var lz = 0; lz < 2; lz++)
+            {
+                for (var lx = 0; lx < 2; lx++)
+                {
+                    if (!outer && rng.NextDouble() < 0.08) continue; // the odd empty lot
+
+                    var side = new Vector3(lx * 2 - 1, 0f, lz * 2 - 1); // which corner of the block
+                    var width = lot - 1f - (float)rng.NextDouble() * 4f;
+                    var depth = lot - 1f - (float)rng.NextDouble() * 4f;
+                    var height = outer ? 14f + (float)rng.NextDouble() * 20f : 6f + (float)rng.NextDouble() * 22f;
                     var shade = 0.05f + (int)(rng.NextDouble() * 4) * 0.02f; // a few shades, so a few materials
 
-                    route.Evaluate(d, out var p, out var f);
-                    var right = Vector3.Cross(Vector3.up, f);
-                    var pos = p + right * offset + Vector3.up * (height * 0.5f);
-                    var rot = Quaternion.LookRotation(f);
-
-                    var b = Prim.Box(buildings, "Building", pos, new Vector3(width, height, depth),
+                    // Push each building out to the street so the block reads as a wall of facades.
+                    var centre = block.position + new Vector3(side.x * (lot - width * 0.5f), height * 0.5f, side.z * (lot - depth * 0.5f));
+                    var b = Prim.Box(block, "Building", Vector3.zero, Vector3.one,
                         Prim.Lit(new Color(shade, shade * 1.05f, shade * 1.2f), 0.05f));
-                    b.transform.rotation = rot;
+                    b.transform.position = centre;
+                    b.transform.localScale = new Vector3(width, height, depth);
+                    b.AddComponent<BoxCollider>();
 
-                    if (rng.NextDouble() < 0.4)
+                    if (rng.NextDouble() < 0.5)
                     {
+                        // A lit window on one of the street-facing sides.
+                        var onX = rng.NextDouble() < 0.5;
                         var wy = 2f + (float)rng.NextDouble() * Mathf.Max(1f, height - 4f);
-                        var wp = pos + right * (-side * (width * 0.5f + 0.02f)) + Vector3.up * (wy - height * 0.5f);
-                        var w = Prim.Box(b.transform, "Window", Vector3.zero, Vector3.one, window);
-                        w.transform.SetPositionAndRotation(wp, rot);
-                        w.transform.localScale = new Vector3(0.1f / width, 1.3f / height, 1.4f / depth);
+                        var offset = onX
+                            ? new Vector3(side.x * (width * 0.5f + 0.02f), 0f, 0f)
+                            : new Vector3(0f, 0f, side.z * (depth * 0.5f + 0.02f));
+                        var size = onX ? new Vector3(0.1f, 1.3f, 1.4f) : new Vector3(1.4f, 1.3f, 0.1f);
+                        var w = Prim.Box(block, "Window", Vector3.zero, size, window);
+                        w.transform.position = centre + offset + Vector3.up * (wy - height * 0.5f);
+                        w.transform.SetParent(b.transform, true);
                     }
                 }
             }
         }
 
+        void BuildBoundary()
+        {
+            // Invisible walls just outside the ring of outer blocks, in case a gap lets the car through.
+            var walls = Child(worldRoot, "BoundaryWalls").transform;
+            var min = map.Intersection(-1f, -1f);
+            var max = map.Intersection(Columns, Rows);
+            var size = max - min;
+            var centre = (min + max) * 0.5f;
+
+            void Wall(string name, Vector3 pos, Vector3 scale)
+            {
+                var go = Child(walls, name);
+                go.transform.position = pos + Vector3.up * 5f;
+                go.AddComponent<BoxCollider>().size = scale;
+            }
+
+            Wall("North", new Vector3(centre.x, 0f, max.z), new Vector3(size.x, 10f, 1f));
+            Wall("South", new Vector3(centre.x, 0f, min.z), new Vector3(size.x, 10f, 1f));
+            Wall("East", new Vector3(max.x, 0f, centre.z), new Vector3(1f, 10f, size.z));
+            Wall("West", new Vector3(min.x, 0f, centre.z), new Vector3(1f, 10f, size.z));
+        }
+
         void BuildCemetery()
         {
             var cemetery = Child(worldRoot, "Cemetery").transform;
+            cemetery.position = map.BlockCenter(CemeteryBlock.x, CemeteryBlock.y);
+            var grass = Prim.Lit(new Color(0.04f, 0.06f, 0.04f), 0.02f);
             var stone = Prim.Lit(new Color(0.16f, 0.17f, 0.18f), 0.1f);
             var iron = Prim.Lit(new Color(0.05f, 0.05f, 0.06f), 0.3f);
 
-            route.Evaluate(PickupDistance, out _, out var f);
-            var rot = Quaternion.LookRotation(f);
-            var gate = route.OffsetPoint(PickupDistance, 9.5f);
+            var inner = Block - RoadWidth;
+            var half = inner * 0.5f - 1f;
+            const float gateHalf = 2.5f;
+            Prim.Box(cemetery, "Grass", new Vector3(0f, 0.03f, 0f), new Vector3(inner, 0.06f, inner), grass);
 
-            Prim.Box(cemetery, "GatePostA", gate + f * 2.4f + Vector3.up * 1.7f, new Vector3(0.9f, 3.4f, 0.9f), stone);
-            Prim.Box(cemetery, "GatePostB", gate - f * 2.4f + Vector3.up * 1.7f, new Vector3(0.9f, 3.4f, 0.9f), stone);
-            Prim.Box(cemetery, "GateArch", gate + Vector3.up * 3.4f, new Vector3(0.4f, 0.3f, 5.7f), iron).transform.rotation = rot;
-            Prim.Box(cemetery, "Fence", gate + f * 24f + Vector3.up * 0.8f, new Vector3(0.1f, 1.6f, 38f), iron).transform.rotation = rot;
-            Prim.Box(cemetery, "Fence", gate - f * 24f + Vector3.up * 0.8f, new Vector3(0.1f, 1.6f, 38f), iron).transform.rotation = rot;
-
-            for (var i = 0; i < 16; i++)
+            GameObject Solid(GameObject go)
             {
-                var along = ((float)rng.NextDouble() - 0.5f) * 40f;
-                var back = 13f + (float)rng.NextDouble() * 12f;
-                var pos = route.OffsetPoint(PickupDistance + along, back) + Vector3.up * 0.5f;
+                go.AddComponent<BoxCollider>();
+                return go;
+            }
+
+            // Fence on all four sides, with the gate gap facing the south road where the pickup is.
+            Solid(Prim.Box(cemetery, "Fence", new Vector3(0f, 0.8f, half), new Vector3(half * 2f, 1.6f, 0.1f), iron));
+            Solid(Prim.Box(cemetery, "Fence", new Vector3(half, 0.8f, 0f), new Vector3(0.1f, 1.6f, half * 2f), iron));
+            Solid(Prim.Box(cemetery, "Fence", new Vector3(-half, 0.8f, 0f), new Vector3(0.1f, 1.6f, half * 2f), iron));
+            var southLength = half - gateHalf;
+            Solid(Prim.Box(cemetery, "Fence", new Vector3(-(gateHalf + southLength * 0.5f), 0.8f, -half), new Vector3(southLength, 1.6f, 0.1f), iron));
+            Solid(Prim.Box(cemetery, "Fence", new Vector3(gateHalf + southLength * 0.5f, 0.8f, -half), new Vector3(southLength, 1.6f, 0.1f), iron));
+
+            Solid(Prim.Box(cemetery, "GatePostA", new Vector3(-gateHalf - 0.45f, 1.7f, -half), new Vector3(0.9f, 3.4f, 0.9f), stone));
+            Solid(Prim.Box(cemetery, "GatePostB", new Vector3(gateHalf + 0.45f, 1.7f, -half), new Vector3(0.9f, 3.4f, 0.9f), stone));
+            Prim.Box(cemetery, "GateArch", new Vector3(0f, 3.4f, -half), new Vector3(gateHalf * 2f + 1.8f, 0.3f, 0.4f), iron);
+
+            for (var i = 0; i < 40; i++)
+            {
+                var x = ((float)rng.NextDouble() - 0.5f) * (half * 2f - 6f);
+                var z = ((float)rng.NextDouble() - 0.5f) * (half * 2f - 10f) + 2f;
                 var h = 0.7f + (float)rng.NextDouble() * 0.7f;
-                var s = Prim.Box(cemetery, "Tombstone", pos + Vector3.up * (h * 0.5f - 0.5f), new Vector3(0.7f, h, 0.18f), stone);
-                s.transform.rotation = rot * Quaternion.Euler(0f, ((float)rng.NextDouble() - 0.5f) * 20f, 0f);
+                var s = Prim.Box(cemetery, "Tombstone", new Vector3(x, h * 0.5f, z), new Vector3(0.7f, h, 0.18f), stone);
+                s.transform.localRotation = Quaternion.Euler(0f, ((float)rng.NextDouble() - 0.5f) * 20f, 0f);
             }
         }
 
         void BuildHouse()
         {
             var house = Child(worldRoot, "DropoffHouse").transform;
-            route.Evaluate(dropoffDistance, out _, out var f);
-            var rot = Quaternion.LookRotation(f);
-            var center = route.OffsetPoint(dropoffDistance, 15f);
+            house.position = map.BlockCenter(HouseBlock.x, HouseBlock.y);
+            var yard = Prim.Lit(new Color(0.05f, 0.06f, 0.045f), 0.02f);
             var wall = Prim.Lit(new Color(0.12f, 0.11f, 0.1f), 0.05f);
             var roof = Prim.Lit(new Color(0.06f, 0.05f, 0.05f), 0.05f);
             var warm = Prim.Unlit(new Color(1f, 0.74f, 0.4f) * 0.9f);
 
-            Prim.Box(house, "Walls", center + Vector3.up * 2.5f, new Vector3(9f, 5f, 8f), wall).transform.rotation = rot;
-            Prim.Box(house, "Roof", center + Vector3.up * 5.4f, new Vector3(10f, 0.8f, 9f), roof).transform.rotation = rot;
+            var inner = Block - RoadWidth;
+            Prim.Box(house, "Yard", new Vector3(0f, 0.03f, 0f), new Vector3(inner, 0.06f, inner), yard);
 
-            var roadFacing = Vector3.Cross(Vector3.up, f); // right of the road; the house door faces back toward the road (-right)
-            Prim.Box(house, "Window", center - roadFacing * 4.52f + Vector3.up * 2.6f, new Vector3(0.1f, 1.4f, 1.6f), warm).transform.rotation = rot;
-            Prim.PointLight(house, "PorchLight", center - roadFacing * 5.5f + Vector3.up * 3f, new Color(1f, 0.75f, 0.4f), 12f, 5f);
+            // The house faces north, onto the road where the drop-off is.
+            var front = inner * 0.5f - Sidewalk - 8f;
+            var centre = new Vector3(0f, 0f, front - 4f);
+            Prim.Box(house, "Walls", centre + Vector3.up * 2.5f, new Vector3(9f, 5f, 8f), wall).AddComponent<BoxCollider>();
+            Prim.Box(house, "Roof", centre + Vector3.up * 5.4f, new Vector3(10f, 0.8f, 9f), roof);
+            Prim.Box(house, "Window", centre + new Vector3(2f, 2.6f, 4.02f), new Vector3(1.6f, 1.4f, 0.1f), warm);
+            Prim.Box(house, "Door", centre + new Vector3(-1.5f, 1.1f, 4.02f), new Vector3(1.1f, 2.2f, 0.1f), roof);
+            Prim.PointLight(house, "PorchLight", centre + new Vector3(-1.5f, 3f, 5.5f), new Color(1f, 0.75f, 0.4f), 12f, 5f);
         }
 
         static GameObject BuildMarker(Transform parent, string name, Vector3 position, Color color)
@@ -289,11 +371,22 @@ namespace LastFare.Editor
             public Transform Eye;
         }
 
-        CarParts BuildCar(RouteLoop routeLoop)
+        static CarParts BuildCar(Vector3 position, Quaternion rotation)
         {
             var carGo = new GameObject("Car");
-            var car = carGo.AddComponent<CarController>();
             var t = carGo.transform;
+            t.SetPositionAndRotation(position, rotation);
+
+            var body = carGo.AddComponent<Rigidbody>();
+            body.mass = 1300f;
+            body.useGravity = false;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            body.constraints = RigidbodyConstraints.FreezePositionY | RigidbodyConstraints.FreezeRotation;
+            var hull = carGo.AddComponent<BoxCollider>();
+            hull.center = new Vector3(0f, 0.9f, 0.4f);
+            hull.size = new Vector3(1.9f, 1.5f, 4.6f);
+            var car = carGo.AddComponent<CarController>();
 
             var shell = Prim.Lit(new Color(0.06f, 0.06f, 0.07f), 0.1f);
             var trim = Prim.Lit(new Color(0.1f, 0.1f, 0.12f), 0.2f);
@@ -301,19 +394,19 @@ namespace LastFare.Editor
             var glow = Prim.Unlit(new Color(0.2f, 0.95f, 0.55f));
 
             // Body
-            var body = Child(t, "Body").transform;
-            Prim.Box(body, "Floor", new Vector3(0f, 0.25f, -0.1f), new Vector3(1.8f, 0.1f, 3.4f), shell);
-            Prim.Box(body, "Roof", new Vector3(0f, 1.62f, -0.5f), new Vector3(1.8f, 0.06f, 2.1f), shell);
-            Prim.Box(body, "Hood", new Vector3(0f, 0.88f, 2.0f), new Vector3(1.7f, 0.1f, 1.4f), shell);
-            Prim.Box(body, "Dash", new Vector3(0f, 0.85f, 0.9f), new Vector3(1.8f, 0.38f, 0.55f), trim);
-            Prim.Box(body, "Cluster", new Vector3(-0.4f, 1.0f, 0.64f), new Vector3(0.32f, 0.07f, 0.02f), glow);
-            Prim.Box(body, "RearPanel", new Vector3(0f, 0.8f, -1.95f), new Vector3(1.8f, 0.9f, 0.1f), shell);
+            var shellRoot = Child(t, "Body").transform;
+            Prim.Box(shellRoot, "Floor", new Vector3(0f, 0.25f, -0.1f), new Vector3(1.8f, 0.1f, 3.4f), shell);
+            Prim.Box(shellRoot, "Roof", new Vector3(0f, 1.62f, -0.5f), new Vector3(1.8f, 0.06f, 2.1f), shell);
+            Prim.Box(shellRoot, "Hood", new Vector3(0f, 0.88f, 2.0f), new Vector3(1.7f, 0.1f, 1.4f), shell);
+            Prim.Box(shellRoot, "Dash", new Vector3(0f, 0.85f, 0.9f), new Vector3(1.8f, 0.38f, 0.55f), trim);
+            Prim.Box(shellRoot, "Cluster", new Vector3(-0.4f, 1.0f, 0.64f), new Vector3(0.32f, 0.07f, 0.02f), glow);
+            Prim.Box(shellRoot, "RearPanel", new Vector3(0f, 0.8f, -1.95f), new Vector3(1.8f, 0.9f, 0.1f), shell);
             foreach (var side in new[] { -1f, 1f })
             {
-                Prim.Box(body, "Door", new Vector3(side * 0.92f, 0.7f, -0.45f), new Vector3(0.08f, 0.6f, 2.8f), trim);
-                Prim.Box(body, "PillarA", new Vector3(side * 0.88f, 1.2f, 0.5f), new Vector3(0.07f, 0.85f, 0.07f), shell);
-                Prim.Box(body, "PillarB", new Vector3(side * 0.9f, 1.25f, -0.6f), new Vector3(0.08f, 0.8f, 0.12f), shell);
-                Prim.Box(body, "PillarC", new Vector3(side * 0.85f, 1.25f, -1.85f), new Vector3(0.08f, 0.8f, 0.12f), shell);
+                Prim.Box(shellRoot, "Door", new Vector3(side * 0.92f, 0.7f, -0.45f), new Vector3(0.08f, 0.6f, 2.8f), trim);
+                Prim.Box(shellRoot, "PillarA", new Vector3(side * 0.88f, 1.2f, 0.5f), new Vector3(0.07f, 0.85f, 0.07f), shell);
+                Prim.Box(shellRoot, "PillarB", new Vector3(side * 0.9f, 1.25f, -0.6f), new Vector3(0.08f, 0.8f, 0.12f), shell);
+                Prim.Box(shellRoot, "PillarC", new Vector3(side * 0.85f, 1.25f, -1.85f), new Vector3(0.08f, 0.8f, 0.12f), shell);
             }
 
             // Seats (tops stay below eye height so looking back is not blocked)
@@ -365,8 +458,6 @@ namespace LastFare.Editor
             var mirror = BuildMirror(t);
             Wire(look, ("cam", cam), ("mirrorTarget", mirror));
 
-            Wire(car, ("route", routeLoop), ("startDistance", StartDistance));
-            car.Init(route, StartDistance); // also places the car at the start in the editor
             return new CarParts { Car = car, Look = look, Eye = camGo.transform };
         }
 
@@ -435,16 +526,16 @@ namespace LastFare.Editor
             return actor;
         }
 
-        RoadHazard[] BuildHazards()
+        /// <summary>Hazard figures start hidden; the FareDirector stands them along the drop-off route.</summary>
+        static RoadHazard[] BuildHazards()
         {
             var root = new GameObject("Hazards").transform;
-            var distances = new[] { 470f, 670f, 880f };
-            var hazards = new RoadHazard[distances.Length];
+            var hazards = new RoadHazard[3];
 
             var skin = Prim.Lit(new Color(0.75f, 0.74f, 0.7f), 0.05f);
             var coat = Prim.Lit(new Color(0.2f, 0.19f, 0.2f), 0.05f);
 
-            for (var i = 0; i < distances.Length; i++)
+            for (var i = 0; i < hazards.Length; i++)
             {
                 var go = Child(root, $"Hazard_{i}");
                 Prim.Box(go.transform, "Body", new Vector3(0f, 1.05f, 0f), new Vector3(0.3f, 1.9f, 0.18f), coat);
@@ -452,9 +543,8 @@ namespace LastFare.Editor
                 Prim.Box(go.transform, "ArmR", new Vector3(0.22f, 1.0f, 0f), new Vector3(0.07f, 1.3f, 0.07f), coat);
                 Prim.Sphere(go.transform, "Head", new Vector3(0f, 2.15f, 0f), Vector3.one * 0.24f, skin);
 
-                var hazard = go.AddComponent<RoadHazard>();
-                hazard.Place(route, distances[i]);
-                hazards[i] = hazard;
+                hazards[i] = go.AddComponent<RoadHazard>();
+                go.SetActive(false);
             }
 
             return hazards;
@@ -497,6 +587,9 @@ namespace LastFare.Editor
                         break;
                     case float f:
                         prop.floatValue = f;
+                        break;
+                    case int n:
+                        prop.intValue = n;
                         break;
                     case Object[] array:
                         prop.arraySize = array.Length;

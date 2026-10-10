@@ -1,121 +1,101 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace LastFare.Driving
 {
     /// <summary>
-    /// Semi-on-rails car. It follows a <see cref="RoutePath"/>; the player sets a cruise speed
-    /// (W/S), can slam the brakes (Space), and the car eases to a stop at pickup/dropoff points.
+    /// Free-driving car. W/S accelerate and brake (hold S when stopped to reverse), A/D steer, Space is the
+    /// handbrake. Handling comes from <see cref="ArcadeDrive"/>; the Rigidbody only resolves collisions.
     /// </summary>
+    [RequireComponent(typeof(Rigidbody))]
     public class CarController : MonoBehaviour
     {
-        const float StopComfortDecel = 4f;
-        const float StopSnapDistance = 0.05f;
+        [SerializeField] float maxSpeed = 16f;
+        [SerializeField] float maxReverseSpeed = 5f;
+        [SerializeField] float acceleration = 4.5f;
+        [SerializeField] float brakeDeceleration = 12f;
+        [SerializeField] float maxSteerAngle = 34f;
+        [Tooltip("Impact speed (m/s) that counts as a crash.")]
+        [SerializeField] float crashSpeed = 3f;
 
-        [SerializeField] float maxSpeed = 12f;
-        [SerializeField] float acceleration = 3.5f;
-        [SerializeField] float cruiseDecel = 5f;
-        [SerializeField] float brakeDecel = 11f;
-        [SerializeField] float cruiseChangeRate = 5f;
-        [SerializeField] RouteLoop route;
-        [SerializeField] float startDistance = 40f;
+        Rigidbody body;
+        ArcadeDrive drive;
+        Vector3 commandedDirection;
 
-        RoutePath path;
-        bool hasStop;
-        float stopAt;
-
-        public float Distance { get; private set; }
-        public float Speed { get; private set; }
-        public float TargetSpeed { get; private set; }
+        /// <summary>Signed speed in m/s; negative when reversing.</summary>
+        public float Speed => drive?.Speed ?? 0f;
         public float MaxSpeed => maxSpeed;
+        public bool Braking => drive != null && drive.Braking;
+        public bool Reversing => Speed < -0.1f;
         public bool PlayerControl { get; set; } = true;
-        public bool Braking { get; private set; }
+
+        /// <summary>Raised when the car hits something hard enough. Argument: impact speed in m/s.</summary>
+        public event Action<float> Crashed;
 
         void Awake()
         {
-            if (route != null) Init(route.Path, startDistance);
+            body = GetComponent<Rigidbody>();
+            drive = new ArcadeDrive
+            {
+                MaxSpeed = maxSpeed,
+                MaxReverseSpeed = maxReverseSpeed,
+                Acceleration = acceleration,
+                BrakeDeceleration = brakeDeceleration,
+                MaxSteerAngle = maxSteerAngle
+            };
+            commandedDirection = transform.forward;
         }
 
-        public void Init(RoutePath routePath, float distance)
+        public bool IsStoppedNear(Vector3 point, float radius)
         {
-            path = routePath;
-            Distance = distance;
-            Speed = 0f;
-            TargetSpeed = 0f;
-            ApplyTransform();
+            var offset = point - transform.position;
+            offset.y = 0f;
+            return offset.magnitude <= radius && Mathf.Abs(Speed) < 0.5f;
         }
 
-        public void StopAt(float distance)
-        {
-            hasStop = true;
-            stopAt = distance;
-        }
-
-        public void ClearStop() => hasStop = false;
-
-        public float RemainingToStop => hasStop ? stopAt - Distance : float.PositiveInfinity;
-
-        public bool IsStoppedAtTarget => hasStop && RemainingToStop <= 0.4f && Speed < 0.15f;
-
-        /// <summary>Immediately cut speed (used by scares).</summary>
+        /// <summary>Immediately cut speed and take control away from the player (used by scares).</summary>
         public void HaltNow()
         {
-            Speed = 0f;
-            TargetSpeed = 0f;
+            drive.Speed = 0f;
             PlayerControl = false;
+            body.linearVelocity = Vector3.zero;
         }
 
-        void Update()
+        void FixedUpdate()
         {
-            if (path == null) return;
+            // If a collision slowed us, keep that: never drive faster than physics actually let us move.
+            var actual = Vector3.Dot(body.linearVelocity, commandedDirection);
+            if (Mathf.Abs(actual) < Mathf.Abs(drive.Speed)) drive.Speed = actual;
 
-            ReadInput(Time.deltaTime);
+            ReadInput(out var throttle, out var brake, out var handbrake, out var steer);
+            var yaw = drive.Step(throttle, brake, handbrake, steer, Time.fixedDeltaTime);
 
-            var desired = TargetSpeed;
-
-            if (hasStop)
-            {
-                var remaining = stopAt - Distance;
-                // Close to the stop, keep creeping so the player doesn't have to hover on the pedal.
-                if (remaining < 10f && !Braking) desired = Mathf.Max(desired, 2f);
-                var limit = Mathf.Sqrt(2f * StopComfortDecel * Mathf.Max(0f, remaining));
-                desired = Mathf.Min(desired, limit);
-            }
-
-            var rate = desired >= Speed ? acceleration : (Braking ? brakeDecel : cruiseDecel);
-            Speed = Mathf.MoveTowards(Speed, desired, rate * Time.deltaTime);
-            Distance += Speed * Time.deltaTime;
-
-            if (hasStop && stopAt - Distance <= StopSnapDistance)
-            {
-                Distance = Mathf.Min(Distance, stopAt);
-                Speed = 0f;
-            }
-
-            ApplyTransform();
+            var rotation = body.rotation * Quaternion.Euler(0f, yaw, 0f);
+            body.MoveRotation(rotation);
+            commandedDirection = rotation * Vector3.forward;
+            body.linearVelocity = commandedDirection * drive.Speed;
         }
 
-        void ReadInput(float dt)
+        void ReadInput(out float throttle, out float brake, out bool handbrake, out float steer)
         {
-            Braking = false;
+            throttle = brake = steer = 0f;
+            handbrake = !PlayerControl;
+
             var kb = Keyboard.current;
             if (kb == null || !PlayerControl) return;
 
-            if (kb.wKey.isPressed || kb.upArrowKey.isPressed) TargetSpeed += cruiseChangeRate * dt;
-            if (kb.sKey.isPressed || kb.downArrowKey.isPressed) TargetSpeed -= cruiseChangeRate * dt;
-            if (kb.spaceKey.isPressed)
-            {
-                Braking = true;
-                TargetSpeed = 0f;
-            }
-
-            TargetSpeed = Mathf.Clamp(TargetSpeed, 0f, maxSpeed);
+            if (kb.wKey.isPressed || kb.upArrowKey.isPressed) throttle = 1f;
+            if (kb.sKey.isPressed || kb.downArrowKey.isPressed) brake = 1f;
+            if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) steer -= 1f;
+            if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) steer += 1f;
+            handbrake = kb.spaceKey.isPressed;
         }
 
-        void ApplyTransform()
+        void OnCollisionEnter(Collision collision)
         {
-            path.Evaluate(Distance, out var pos, out var fwd);
-            transform.SetPositionAndRotation(pos, Quaternion.LookRotation(fwd, Vector3.up));
+            var impact = collision.relativeVelocity.magnitude;
+            if (impact >= crashSpeed) Crashed?.Invoke(impact);
         }
     }
 }

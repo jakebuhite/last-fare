@@ -70,11 +70,11 @@ namespace LastFare.UI
                 GUI.Label(new Rect(w / 2 - 330, 24, 660, 34), director.Objective, center);
             }
 
-            var speedText = $"{car.Speed * 3.6f:0} km/h   (set {car.TargetSpeed * 3.6f:0})";
-            Box(new Rect(w - 360, h - 120, 340, 100), 0.4f);
-            GUI.Label(new Rect(w - 350, h - 114, 320, 30), speedText, normal);
-            GUI.Label(new Rect(w - 350, h - 84, 330, 64),
-                "W/S speed   Space brake\nMouse look   Hold Right Mouse: mirror", small);
+            var speedText = $"{Mathf.Abs(car.Speed) * 3.6f:0} km/h{(car.Reversing ? "   R" : "")}";
+            Box(new Rect(w - 440, h - 120, 420, 100), 0.4f);
+            GUI.Label(new Rect(w - 430, h - 114, 400, 30), speedText, normal);
+            GUI.Label(new Rect(w - 430, h - 84, 410, 64),
+                "W gas   S brake/reverse   A/D steer   Space handbrake\nMouse look   Hold Right Mouse: mirror", small);
 
             GUI.color = new Color(1, 1, 1, 0.5f);
             GUI.DrawTexture(new Rect(w / 2 - 2, h / 2 - 2, 4, 4), Texture2D.whiteTexture);
