@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 547274628ea5067448340870235be93c, type: 3}
+  m_Name: Passenger_QuietOne
+  m_EditorClassIdentifier: LastFare.Runtime::LastFare.Data.PassengerDefinition
+  displayName: Elias V.
+  shownRating: 5
+  redFlags:
+  - Rated 5.0 by 0 drivers
+  - 'Pickup: Mercy Hill Cemetery, closed since 9 PM'
+  - 'Trip note from a previous driver: "He never says anything."'
+  rules:
+  - He only moves when you aren't looking at him.
+  - Holding your gaze on him pushes him back.
+  - A quick glance is enough to stop him, but he won't stay back.
+  prefab: {fileID: 0}
