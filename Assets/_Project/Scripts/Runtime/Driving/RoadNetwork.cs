@@ -89,20 +89,30 @@ namespace LastFare.Driving
         /// The result starts and ends at those snapped points, with every intersection passed in between.
         /// Routes that start by turning around (against <paramref name="heading"/>) cost an extra
         /// <paramref name="turnAroundPenalty"/> metres, so the GPS prefers carrying on when it's close.
+        /// If <paramref name="segmentEdges"/> is given it is filled with the road index of each route segment
+        /// (segment i runs from point i to point i + 1).
         /// </summary>
-        public List<Vector3> FindRoute(Vector3 from, Vector3 to, Vector3 heading = default, float turnAroundPenalty = 0f)
+        public List<Vector3> FindRoute(Vector3 from, Vector3 to, Vector3 heading = default, float turnAroundPenalty = 0f,
+            List<int> segmentEdges = null)
         {
+            segmentEdges?.Clear();
             var start = ClosestPoint(from, out var startEdge);
             var end = ClosestPoint(to, out var endEdge);
-            if (startEdge == endEdge) return new List<Vector3> { start, end };
+            if (startEdge == endEdge)
+            {
+                segmentEdges?.Add(startEdge);
+                return new List<Vector3> { start, end };
+            }
 
             var dist = new float[nodes.Length];
             var prev = new int[nodes.Length];
+            var prevEdge = new int[nodes.Length];
             var done = new bool[nodes.Length];
             for (var i = 0; i < nodes.Length; i++)
             {
                 dist[i] = float.PositiveInfinity;
                 prev[i] = -1;
+                prevEdge[i] = -1;
             }
 
             var (sa, sb) = edges[startEdge];
@@ -114,7 +124,7 @@ namespace LastFare.Driving
                 if (Vector3.Dot(nodes[sb] - start, heading) < 0f) dist[sb] += turnAroundPenalty;
             }
 
-            // Dijkstra. Maps are small (tens of intersections), so a linear scan beats a heap here.
+            // Dijkstra. Maps have a few hundred nodes and we re-route a few times a second, so a linear scan is plenty.
             for (var iter = 0; iter < nodes.Length; iter++)
             {
                 var u = -1;
@@ -134,6 +144,7 @@ namespace LastFare.Driving
                     {
                         dist[v] = d;
                         prev[v] = u;
+                        prevEdge[v] = e;
                     }
                 }
             }
@@ -145,9 +156,16 @@ namespace LastFare.Driving
             if (float.IsPositiveInfinity(dist[last])) return new List<Vector3> { start }; // unreachable
 
             var path = new List<Vector3> { end };
-            for (var n = last; n >= 0; n = prev[n]) path.Add(nodes[n]);
+            segmentEdges?.Add(endEdge);
+            for (var n = last; n >= 0; n = prev[n])
+            {
+                path.Add(nodes[n]);
+                segmentEdges?.Add(prev[n] >= 0 ? prevEdge[n] : startEdge);
+            }
+
             path.Add(start);
             path.Reverse();
+            segmentEdges?.Reverse();
             return path;
         }
 

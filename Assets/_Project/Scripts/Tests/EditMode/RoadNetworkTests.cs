@@ -67,6 +67,24 @@ namespace LastFare.Tests
         }
 
         [Test]
+        public void FindRoute_ReportsTheRoadOfEverySegment()
+        {
+            var net = Grid();
+            var roads = new System.Collections.Generic.List<int>();
+            var route = net.FindRoute(new Vector3(5f, 0f, 0f), new Vector3(20f, 0f, 15f), segmentEdges: roads);
+
+            Assert.AreEqual(route.Count - 1, roads.Count);
+            for (var i = 0; i < roads.Count; i++)
+            {
+                // Each segment's midpoint must lie on the road it was reported on.
+                var mid = (route[i] + route[i + 1]) * 0.5f;
+                var (a, b) = net.Edge(roads[i]);
+                var onRoad = Vector3.Distance(net.Node(a), mid) + Vector3.Distance(mid, net.Node(b));
+                Assert.AreEqual(Vector3.Distance(net.Node(a), net.Node(b)), onRoad, 0.01f, $"segment {i}");
+            }
+        }
+
+        [Test]
         public void FindRoute_SameRoad_GoesStraightThere()
         {
             var route = Grid().FindRoute(new Vector3(2f, 0f, 0f), new Vector3(8f, 0f, 0f));

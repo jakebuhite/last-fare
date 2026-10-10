@@ -70,7 +70,7 @@ namespace LastFare.UI
                 GUI.Label(new Rect(w / 2 - 330, 24, 660, 34), director.Objective, center);
             }
 
-            var speedText = $"{Mathf.Abs(car.Speed) * 3.6f:0} km/h{(car.Reversing ? "   R" : "")}";
+            var speedText = $"{Mathf.Abs(car.Speed) * 3.6f:0} km/h{(car.Reversing ? "   R" : "")}{(car.OffRoad ? "   off-road" : "")}";
             Box(new Rect(w - 440, h - 120, 420, 100), 0.4f);
             GUI.Label(new Rect(w - 430, h - 114, 400, 30), speedText, normal);
             GUI.Label(new Rect(w - 430, h - 84, 410, 64),

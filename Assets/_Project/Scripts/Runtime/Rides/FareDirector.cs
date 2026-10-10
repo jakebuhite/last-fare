@@ -166,7 +166,7 @@ namespace LastFare.Rides
             offset.y = 0f;
             return offset.magnitude <= ArriveRadius
                 ? $"{verb}: stop here"
-                : $"{verb}: {label}  ({gps.Instruction.RemainingMeters:0} m)";
+                : $"{verb}: {label}  ({GpsDirections.FormatDistance(gps.Instruction.RemainingMeters)})";
         }
 
         void TickPassenger()

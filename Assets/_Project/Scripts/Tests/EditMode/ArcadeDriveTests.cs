@@ -1,5 +1,6 @@
 using LastFare.Driving;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace LastFare.Tests
 {
@@ -58,6 +59,23 @@ namespace LastFare.Tests
             var reverse = new ArcadeDrive { Speed = -3f };
             Run(reverse, 0.5f, 0f, 1f, steer: 1f);
             Assert.That(reverse.Step(0f, 1f, false, 1f, Dt), Is.LessThan(0f));
+        }
+
+        [Test]
+        public void Grip_LimitsTurningAtHighwaySpeed()
+        {
+            var drive = new ArcadeDrive { MaxSpeed = 28f, Speed = 28f };
+            Run(drive, 1f, 1f, 0f, steer: 1f);
+            var yawPerSecond = drive.Step(1f, 0f, false, 1f, Dt) / Dt * Mathf.Deg2Rad;
+            Assert.LessOrEqual(yawPerSecond, drive.MaxLateralAcceleration / drive.Speed + 1e-4f);
+        }
+
+        [Test]
+        public void OverMaxSpeed_SlowsDown()
+        {
+            var drive = new ArcadeDrive { MaxSpeed = 9f, Speed = 25f };
+            Run(drive, 3f, 1f, 0f);
+            Assert.AreEqual(9f, drive.Speed, 0.001f);
         }
 
         [Test]

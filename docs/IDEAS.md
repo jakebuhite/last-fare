@@ -10,6 +10,10 @@ Capture first, judge later. One line each. Triage weekly: **promote** (move to `
 - A passenger who tips with something that isn't money
 - Dashcam shows a different passenger count than the mirror
 - Final ride of the game is a request from your own address
+- A county road linking two neighborhoods, so the GPS has a real choice of route (and can lie about it)
+- Gas station on a highway: the only lit building for a kilometre
+- Traffic: a single pair of headlights that keeps appearing behind you on the highway
+- A house number that isn't on the street when you get there
 
 ## Parked
 _(nothing yet)_

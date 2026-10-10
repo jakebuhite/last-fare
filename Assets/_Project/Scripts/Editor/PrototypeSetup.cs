@@ -10,7 +10,7 @@ namespace LastFare.Editor
     /// <summary>
     /// One-click setup for the first-fare prototype: saves the content assets and base materials, then
     /// (re)builds <c>Assets/_Project/Scenes/Main.unity</c> with every GameObject laid out in the scene.
-    /// Rebuilding replaces the scene and everything in <see cref="PrototypeSceneBuilder.GeneratedDir"/>.
+    /// Rebuilding replaces the scene and everything in <see cref="GeneratedAssets.Dir"/>.
     /// </summary>
     public static class PrototypeSetup
     {
@@ -41,12 +41,11 @@ namespace LastFare.Editor
             // Start from a fresh scene so nothing references the generated assets we're about to replace.
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            var generated = PrototypeSceneBuilder.GeneratedDir;
-            if (AssetDatabase.IsValidFolder(generated)) AssetDatabase.DeleteAsset(generated);
-            AssetDatabase.CreateFolder(Path.GetDirectoryName(generated)!.Replace('\\', '/'), Path.GetFileName(generated));
+            GeneratedAssets.ResetFolders();
 
-            new PrototypeSceneBuilder(ride, lit, unlit).Build();
-            PrototypeSceneBuilder.SaveGeneratedAssets(scene.GetRootGameObjects());
+            var builder = new PrototypeSceneBuilder(ride, lit, unlit);
+            builder.Build();
+            builder.SaveAssets(scene.GetRootGameObjects());
 
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath)!);
             EditorSceneManager.SaveScene(scene, ScenePath);

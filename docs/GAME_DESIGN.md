@@ -23,6 +23,14 @@ You're a rideshare driver working the night shift. Every request pays, and every
 - Rules and clues discovered are kept in the **journal**, so knowledge is the persistent progression, not stats.
 - A background mystery (the previous driver, the app itself) unfolds across nights.
 
+## The world
+Fares start **downtown**: a 5×5-block grid of streets with Mercy Hill Cemetery, a park, a rideshare lot, neon and lit windows. Passengers get "ubered" home along **highways** (about 1 km each: four lanes, guardrails, sodium lamps, an abandoned car with its hazards on) to three **neighborhoods** of cul-de-sacs. Every house there has a real address:
+- **Harrow Heights** (north, Route 9): newer, porch lights on.
+- **Wren Hollow** (east, Route 40): wooded and sparse.
+- **Aldous Park** (southwest, Route 12): older, dead trees, few lights. The Quiet One lives at 114 Aldous Street.
+
+Between them is dark countryside. You can drive on it, but only slowly. See ADR 0004.
+
 ## Tone and look
 Low-poly, slightly PS1 and dithered, heavy fog and sodium streetlight orange. Cheap to make, reads as horror, hides rough art.
 

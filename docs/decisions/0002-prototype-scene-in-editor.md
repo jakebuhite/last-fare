@@ -6,7 +6,7 @@
 The first-fare prototype was generated entirely at runtime by a `PrototypeBuilder` MonoBehaviour. The scene held one empty GameObject, so nothing could be inspected, moved or tuned without editing code, and art could not be swapped in piece by piece.
 
 ## Decision
-`Last Fare > Build First-Fare Prototype Scene` (`PrototypeSceneBuilder`, editor-only) builds the greybox into `Main.unity` as ordinary GameObjects. Components reference each other through `[SerializeField]` fields instead of runtime `Init()` calls. Generated materials, the road mesh and the mirror render texture are saved to `Assets/_Project/Art/Generated/`. The street grid lives on a `CityMap` component.
+`Last Fare > Build First-Fare Prototype Scene` (`PrototypeSceneBuilder`, editor-only) builds the greybox into `Main.unity` as ordinary GameObjects. Components reference each other through `[SerializeField]` fields instead of runtime `Init()` calls. The layout comes from `WorldGenerator` (see [0004](0004-city-highways-neighborhoods.md)). Generated materials, merged road meshes, prefabs (houses, trees, lamps, cars) and the mirror render texture are saved to `Assets/_Project/Art/Generated/`. The road graph lives on a `RoadMap` component.
 
 ## Consequences
 - The scene is the source of truth: hand-edit it, replace greybox with real art, turn pieces into prefabs.
