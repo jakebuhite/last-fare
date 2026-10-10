@@ -35,11 +35,12 @@ namespace LastFare.Passengers
 
         const float StandingHipHeight = 0.9f;
 
-        Transform car;
-        Transform eye;
-        Transform upper;
-        GameObject legs;
-        Transform head;
+        [SerializeField] Transform car;
+        [SerializeField] Transform eye;
+        [SerializeField] Transform upper;
+        [SerializeField] GameObject legs;
+        [SerializeField] Transform head;
+
         Mode mode = Mode.Hidden;
         CreepModel creep;
 
@@ -55,6 +56,7 @@ namespace LastFare.Passengers
         public Transform Head => head;
         public bool IsSeated => mode == Mode.Seated;
 
+        /// <summary>Creates the greybox body as children. Called once by the scene builder in the editor.</summary>
         public void Build(Transform carTransform, Transform eyeTransform)
         {
             car = carTransform;

@@ -5,7 +5,6 @@ using LastFare.Driving;
 using LastFare.Passengers;
 using LastFare.Player;
 using LastFare.UI;
-using LastFare.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -30,21 +29,25 @@ namespace LastFare.Rides
         const float AttackedRating = -1.6f;
         const float HazardRating = -0.4f;
 
-        RideDefinition ride;
-        RideController controller;
-        CarController car;
-        DriverLook look;
-        PassengerActor passenger;
-        LastFareAudio sound;
-        HudView hud;
-        RoadHazard[] hazards;
-        Transform mirror;
-        GameObject pickupMarker;
-        GameObject dropoffMarker;
-        Vector3 pickupStandPoint;
-        Vector3 roadSideLookPoint;
-        float pickupDistance;
-        float dropoffDistance;
+        [Header("Content")]
+        [SerializeField] RideDefinition ride;
+
+        [Header("Scene")]
+        [SerializeField] RideController controller;
+        [SerializeField] CarController car;
+        [SerializeField] DriverLook look;
+        [SerializeField] PassengerActor passenger;
+        [SerializeField] LastFareAudio sound;
+        [SerializeField] HudView hud;
+        [SerializeField] RoadHazard[] hazards;
+        [SerializeField] GameObject pickupMarker;
+        [SerializeField] GameObject dropoffMarker;
+        [SerializeField] Transform pickupStandPoint;
+        [SerializeField] Transform pickupLookPoint;
+
+        [Header("Stops (metres along the route)")]
+        [SerializeField] float pickupDistance = 250f;
+        [SerializeField] float dropoffDistance = 1050f;
 
         float idleTimer;
         float offerDelay = FirstOfferDelay;
@@ -67,45 +70,14 @@ namespace LastFare.Rides
         public float RatingChange { get; private set; }
         public int FarePaid { get; private set; }
 
-        public class Wiring
+        void Awake()
         {
-            public RideDefinition Ride;
-            public CarController Car;
-            public DriverLook Look;
-            public PassengerActor Passenger;
-            public LastFareAudio Sound;
-            public HudView Hud;
-            public RoadHazard[] Hazards;
-            public Transform Mirror;
-            public GameObject PickupMarker;
-            public GameObject DropoffMarker;
-            public Vector3 PickupStandPoint;
-            public Vector3 RoadSideLookPoint;
-            public float PickupDistance;
-            public float DropoffDistance;
-        }
-
-        public void Init(Wiring w)
-        {
-            ride = w.Ride;
-            car = w.Car;
-            look = w.Look;
-            passenger = w.Passenger;
-            sound = w.Sound;
-            hud = w.Hud;
-            hazards = w.Hazards;
-            mirror = w.Mirror;
-            pickupMarker = w.PickupMarker;
-            dropoffMarker = w.DropoffMarker;
-            pickupStandPoint = w.PickupStandPoint;
-            roadSideLookPoint = w.RoadSideLookPoint;
-            pickupDistance = w.PickupDistance;
-            dropoffDistance = w.DropoffDistance;
+            if (ride == null) ride = QuietOneFare.Create();
+            if (controller == null) controller = GetComponent<RideController>();
 
             Rating = new DriverRating();
             Rating.Deactivated += OnDeactivated;
 
-            controller = gameObject.AddComponent<RideController>();
             controller.StateChanged += OnStateChanged;
 
             foreach (var hazard in hazards)
@@ -113,7 +85,10 @@ namespace LastFare.Rides
                 hazard.Hit += OnHazardHit;
                 hazard.Cleared += OnHazardCleared;
             }
+        }
 
+        void Start()
+        {
             pickupMarker.SetActive(false);
             dropoffMarker.SetActive(false);
             Objective = "Waiting for a ride request...";
@@ -216,7 +191,7 @@ namespace LastFare.Rides
                 case RideState.EnRoute:
                     car.StopAt(pickupDistance);
                     pickupMarker.SetActive(true);
-                    passenger.ShowWaiting(pickupStandPoint, roadSideLookPoint);
+                    passenger.ShowWaiting(pickupStandPoint.position, pickupLookPoint.position);
                     hud.Caption($"Pickup in {ride.PickupLabel}. Someone is already waiting.", 5f);
                     break;
 

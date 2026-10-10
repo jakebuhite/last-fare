@@ -15,8 +15,9 @@ namespace LastFare.Driving
         const float ClearSpeed = 0.6f;
         const float ClearHold = 1.5f;
 
+        [SerializeField] float distance;
+
         CarController car;
-        float distance;
         float stoppedTimer;
 
         public bool Armed { get; private set; }

@@ -15,9 +15,9 @@ namespace LastFare.Player
 
         [SerializeField] float sensitivity = 0.09f;
         [SerializeField] float mirrorSnapSpeed = 10f;
+        [SerializeField] Camera cam;
+        [SerializeField] Transform mirrorTarget;
 
-        Camera cam;
-        Transform mirrorTarget;
         Transform lockTarget;
         float yaw;
         float pitch;
@@ -28,10 +28,8 @@ namespace LastFare.Player
         public bool HoldingMirror { get; private set; }
         public bool InputEnabled { get; set; } = true;
 
-        public void Init(Camera camera, Transform mirror)
+        void Start()
         {
-            cam = camera;
-            mirrorTarget = mirror;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }

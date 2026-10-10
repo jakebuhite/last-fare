@@ -17,8 +17,10 @@ namespace LastFare.Driving
         [SerializeField] float cruiseDecel = 5f;
         [SerializeField] float brakeDecel = 11f;
         [SerializeField] float cruiseChangeRate = 5f;
+        [SerializeField] RouteLoop route;
+        [SerializeField] float startDistance = 40f;
 
-        RoutePath route;
+        RoutePath path;
         bool hasStop;
         float stopAt;
 
@@ -29,10 +31,15 @@ namespace LastFare.Driving
         public bool PlayerControl { get; set; } = true;
         public bool Braking { get; private set; }
 
-        public void Init(RoutePath path, float startDistance)
+        void Awake()
         {
-            route = path;
-            Distance = startDistance;
+            if (route != null) Init(route.Path, startDistance);
+        }
+
+        public void Init(RoutePath routePath, float distance)
+        {
+            path = routePath;
+            Distance = distance;
             Speed = 0f;
             TargetSpeed = 0f;
             ApplyTransform();
@@ -60,7 +67,7 @@ namespace LastFare.Driving
 
         void Update()
         {
-            if (route == null) return;
+            if (path == null) return;
 
             ReadInput(Time.deltaTime);
 
@@ -107,7 +114,7 @@ namespace LastFare.Driving
 
         void ApplyTransform()
         {
-            route.Evaluate(Distance, out var pos, out var fwd);
+            path.Evaluate(Distance, out var pos, out var fwd);
             transform.SetPositionAndRotation(pos, Quaternion.LookRotation(fwd, Vector3.up));
         }
     }

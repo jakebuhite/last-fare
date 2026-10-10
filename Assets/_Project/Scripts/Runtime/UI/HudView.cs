@@ -12,8 +12,9 @@ namespace LastFare.UI
     {
         const float RefHeight = 1080f;
 
-        FareDirector director;
-        CarController car;
+        [SerializeField] FareDirector director;
+        [SerializeField] CarController car;
+
         string caption = "";
         float captionTime;
 
@@ -22,12 +23,6 @@ namespace LastFare.UI
         GUIStyle big;
         GUIStyle title;
         GUIStyle center;
-
-        public void Init(FareDirector fareDirector, CarController carController)
-        {
-            director = fareDirector;
-            car = carController;
-        }
 
         public void Caption(string text, float seconds)
         {
