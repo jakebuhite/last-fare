@@ -6,11 +6,11 @@ Add a detail file in `docs/mechanics/` (copy `_TEMPLATE.md`) once a mechanic is 
 | ID | Mechanic | What it is | Status | Pri |
 |---|---|---|---|---|
 | M01 | Star rating as health | 5-star rating drops from bad service or scares. Below ~3.5 you're deactivated. | prototype (`DriverRating`) | P0 |
-| M02 | Ride request screen | Phone UI with passenger name, rating, pickup and dropoff, fare, countdown. Accept or decline. | planned | P0 |
-| M03 | Red flags | Readable clues on the request (odd name, bad reviews, impossible pickup). Skilled players can screen passengers. | planned | P0 |
-| M04 | Rearview mirror | Look up to check the backseat. Mirror can disagree with reality. Some things only happen when you look away, others only when you look. | planned | P0 |
-| M05 | Driving | Speed and steering along a route. Semi-on-rails along splines to start. | planned | P0 |
-| M06 | Passenger rules | Each passenger has hidden rules (don't answer questions, don't use the radio, never stop). Learn them by observation. | planned | P0 |
+| M02 | Ride request screen | Phone UI with passenger name, rating, pickup and dropoff, fare, countdown. Accept or decline. | prototype (HUD) | P0 |
+| M03 | Red flags | Readable clues on the request (odd name, bad reviews, impossible pickup). Skilled players can screen passengers. | prototype | P0 |
+| M04 | Rearview mirror | Look up to check the backseat. Mirror can disagree with reality. Some things only happen when you look away, others only when you look. | prototype | P0 |
+| M05 | Driving | Speed and steering along a route. Semi-on-rails along splines to start. | prototype | P0 |
+| M06 | Passenger rules | Each passenger has hidden rules (don't answer questions, don't use the radio, never stop). Learn them by observation. | prototype | P0 |
 | M07 | Conversation | Short dialogue choices. Engaging, ignoring and lying all have consequences. | planned | P1 |
 | M08 | Journal | Discovered rules, clues and passengers recorded. The core progression: knowledge. | planned | P1 |
 | M09 | Dashcam | Footage of each ride you can review afterwards. It records things you didn't see. | idea | P1 |
@@ -24,7 +24,7 @@ Add a detail file in `docs/mechanics/` (copy `_TEMPLATE.md`) once a mechanic is 
 | M17 | Dawn timer | Shift ends at sunrise. Time pressure against letting a ride run long. | idea | P1 |
 | M18 | Recurring passenger | One figure who appears across nights, getting closer. Ties into the meta mystery. | idea | P2 |
 | M19 | Tips and upgrades | Spend money on air freshener (lore items), better dashcam, protective charms. | idea | P2 |
-| M20 | Ride endings | Delivered / escaped / still in the car. Each affects rating and the next night. | planned | P0 |
+| M20 | Ride endings | Delivered / escaped / still in the car. Each affects rating and the next night. | prototype | P0 |
 
 ## Suggested first passengers (see `docs/passengers/`)
 - **The Quiet One**: never speaks, only moves when you aren't watching the mirror. (Teaches M04.)

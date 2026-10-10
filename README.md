@@ -11,6 +11,22 @@ Unity 6 (`6000.6.5f1`), URP, Input System.
 3. Clone, then open the folder in Unity Hub.
 4. Run the edit-mode tests: **Window > General > Test Runner > EditMode**.
 
+## Playing the first fare
+1. Open the project in Unity and wait for scripts to compile.
+2. Menu **Last Fare > Create First-Fare Prototype Scene** (creates `Assets/_Project/Scenes/Main.unity` and the content assets).
+3. Press **Play**.
+
+| Control | Action |
+|---|---|
+| Mouse | Look (turn around to see the back seat) |
+| Hold right mouse | Look at the rear-view mirror |
+| W / S | Raise / lower cruise speed |
+| Space | Brake hard |
+| E / Q | Accept / decline the ride request |
+| R | After a ride, take another fare |
+
+The car stops itself at the pickup and drop-off. Details on the passenger: [`docs/passengers/the-quiet-one.md`](docs/passengers/the-quiet-one.md).
+
 ## Where things live
 
 | Path | Purpose |

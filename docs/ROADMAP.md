@@ -15,10 +15,10 @@ Build **one complete fare** end to end (request > drive > passenger event > drop
 ## Milestones
 | # | Name | Goal | Exit criteria |
 |---|---|---|---|
-| 0 | Foundation | Repo, folders, docs, core data and state code | Done (this commit) |
+| 0 | Foundation | Repo, folders, docs, core data and state code | Done |
 | 1 | Greybox car | Player seated in car, look around, mirror, phone prop | Can look at the mirror and phone in a blockout car |
 | 2 | One road | Car travels a spline loop at night with fog and audio | Driving feels tense with no passenger |
-| 3 | One fare | Request > pickup > ride > drop-off with **The Quiet One** | A tester can finish the ride and be scared at least once |
+| 3 | One fare | Request > pickup > ride > drop-off with **The Quiet One** | A tester can finish the ride and be scared at least once. **Built (greybox), awaiting playtest.** Milestones 1-2 were folded into it. |
 | 4 | Rules and journal | Passenger rules, journal, rating consequences | A second playthrough is different because the player learned something |
 | 5 | Three passengers | The Chatterbox and The Wrong Address added | Content added using mostly data, not new systems |
 | 6 | Shift structure | Several fares, dawn timer, results screen, save | A full night is playable |

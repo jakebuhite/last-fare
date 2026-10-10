@@ -21,6 +21,17 @@ namespace LastFare.Data
 
         [SerializeField] GameObject prefab;
 
+        /// <summary>Builds an unsaved instance in code (fallbacks, tests, and the editor setup tool).</summary>
+        public static PassengerDefinition CreateRuntime(string name, float rating, IEnumerable<string> flags, IEnumerable<string> passengerRules)
+        {
+            var p = CreateInstance<PassengerDefinition>();
+            p.displayName = name;
+            p.shownRating = rating;
+            p.redFlags = new List<string>(flags);
+            p.rules = new List<string>(passengerRules);
+            return p;
+        }
+
         public string DisplayName => displayName;
         public float ShownRating => shownRating;
         public IReadOnlyList<string> RedFlags => redFlags;
